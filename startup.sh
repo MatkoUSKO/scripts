@@ -13,6 +13,3 @@ killall -9 click.sh
 # lock computer after few minutes of inactivity
 killall -9 xautolock
 xautolock -time 4 -locker `dirname "$0"`/lock_screen.sh & disown
-
-killall -9 clipmenud
-clipmenu/clipmenud & disown
