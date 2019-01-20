@@ -6,11 +6,22 @@ help() {
   echo "-s to override sink"
 }
 
+get_all_sinks() {
+  list_outputs=$(pactl list sinks | grep "Name: " | cut -d$'\t' -f 2- | cut -d' ' -f 2-)
+
+  for i in $list_outputs; do
+    echo $i
+  done
+}
+
 get_volume() {
   sink=$1
-  volume_str=$(pactl list sinks | perl -lne 'print if /$sink/ .. /Volume:/' | grep "Volume:")
+
+  volume_str=$(pactl list sinks | perl -lne "print if /$sink/ .. /Volume:/" | grep "Volume:" | sed -n 1p)
+
   left_vol=$(echo $volume_str | sed "s/^.*front-left: [0-9]\+ \/ \([0-9]\+\)%.*$/\1/g")
   right_vol=$(echo $volume_str | sed "s/^.*front-right: [0-9]\+ \/ \([0-9]\+\)%.*$/\1/g")
+
   volume=$((($left_vol+$right_vol)/2))
   echo $volume
 }
@@ -18,22 +29,49 @@ get_volume() {
 raise_volume() {
   sink=$1
   step=$2
-  pactl set-sink-volume $sink +$step%
-  volume=$(get_volume $sink) 
-  if [ "$volume" -gt "100" ]; then
-    pactl set-sink-volume $sink 100%
-  fi
+
+  if [ $sink == "all" ]; then
+    for i in $(get_all_sinks); do
+      pactl set-sink-volume $i +$step%
+      volume=$(get_volume $i) 
+      if [ "$volume" -gt "100" ]; then
+        pactl set-sink-volume $i 100%
+      fi
+    done
+  else
+    pactl set-sink-volume $sink +$step%
+    volume=$(get_volume $sink) 
+    if [ "$volume" -gt "100" ]; then
+      pactl set-sink-volume $sink 100%
+    fi
+    volume=$(get_volume $sink) 
+  fi;
 }
 
 lower_volume() {
   sink=$1
   step=$2
-  pactl set-sink-volume $sink -$step%
+
+  if [ $sink == "all" ]; then
+    for i in $(get_all_sinks); do
+      pactl set-sink-volume $i -$step%
+    done
+  else
+    pactl set-sink-volume $sink -$step%
+  fi;
 }
 
 toggle_mute() {
   sink=$1
-  pactl set-sink-mute $sink toggle
+
+  if [ $sink == "all" ]; then
+    for i in $(get_all_sinks); do
+      pactl set-sink-mute $i toggle
+    done
+  else
+    pactl set-sink-mute $sink toggle
+  fi;
+
 }
 
 # set sink to current default sink
@@ -44,7 +82,12 @@ actions=""
 while getopts ":s:k:hVrlm" opt; do
   case $opt in
     s)
-      sink=$OPTARG
+      if [[ $OPTARG =~ [0-9]+ ]]; then
+        readarray -t sinks <<< "$(get_all_sinks)"
+        sink=${sinks[$OPTARG]}
+      else
+        sink=$OPTARG
+      fi
       ;;
     k)
       step=$OPTARG
